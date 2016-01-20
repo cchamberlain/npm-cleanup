@@ -1,0 +1,54 @@
+{
+  "name": "npm-cleanup",
+  "version": "0.1.1",
+  "description": "Cleans node_modules of artifacts that do not belong.",
+  "main": "index.js",
+  "bin": {
+    "npm-cleanup": "./bin.js"
+  },
+  "files": [
+    "LICENSE",
+    "README.md",
+    "bin.js",
+    "npm-cleanup.js"
+  ],
+  "scripts": {
+    "clean": "rimraf bin.js && rimraf npm-cleanup.js",
+    "prebuild": "npm run clean",
+    "build": "babel src -d ./",
+    "prerelease": "npm prune --production=false && npm run dedupe && npm run build",
+    "release": "npm version patch && npm publish",
+    "postrelease": "git push --follow-tags",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cchamberlain/npm-cleanup.git"
+  },
+  "keywords": [
+    "clean",
+    "node_modules",
+    "modules",
+    "npm",
+    "cli",
+    "build",
+    "tools",
+    "crossplatform",
+    "windows",
+    "unix"
+  ],
+  "author": "Cole Chamberlain <cole.chamberlain@gmail.com> (https://github.com/cchamberlain)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/cchamberlain/npm-cleanup/issues"
+  },
+  "homepage": "https://github.com/cchamberlain/npm-cleanup#readme",
+  "dependencies": {
+    "rimraf": "^2.5.0",
+    "vasync": "^1.6.3"
+  },
+  "devDependencies": {
+    "babel-cli": "^6.4.0",
+    "babel-preset-es2015": "^6.3.13"
+  }
+}
