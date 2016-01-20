@@ -1,126 +1,136 @@
-import assert from 'assert'
-import { join } from 'path'
-import { lstat, readdir, readFile } from 'fs'
-import glob from 'glob'
-import { forEachParallel } from 'vasync'
+'use strict';
 
-let globOpts =  { nosort: true
-                , nocomment: true
-                , nonegate: true
-                , silent: true
-                }
+var _typeof = typeof Symbol === "function" && typeof Symbol.iterator === "symbol" ? function (obj) { return typeof obj; } : function (obj) { return obj && typeof Symbol === "function" && obj.constructor === Symbol ? "symbol" : typeof obj; };
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.default = npmCleanup;
+
+var _assert = require('assert');
+
+var _assert2 = _interopRequireDefault(_assert);
+
+var _path = require('path');
+
+var _fs = require('fs');
+
+var _glob = require('glob');
+
+var _glob2 = _interopRequireDefault(_glob);
+
+var _vasync = require('vasync');
+
+function _interopRequireDefault(obj) { return obj && obj.__esModule ? obj : { default: obj }; }
+
+var globOpts = { nosort: true,
+  nocomment: true,
+  nonegate: true,
+  silent: true
+};
 
 // for EMFILE handling
-let timeout = 0
+var timeout = 0;
 
-const isWindows = process.platform === 'win32'
+var isWindows = process.platform === 'win32';
 
 /** Returns a object with sync and async methods from fs or overrides. */
-const defaults = options => {
-  let methods = [ 'unlink'
-                , 'chmod'
-                , 'stat'
-                , 'lstat'
-                , 'rmdir'
-                , 'readdir'
-                ]
-  methods.forEach(m => {
-    options[m] = options[m] || fs[m]
-    m = m + 'Sync'
-    options[m] = options[m] || fs[m]
-  })
+var defaults = function defaults(options) {
+  var methods = ['unlink', 'chmod', 'stat', 'lstat', 'rmdir', 'readdir'];
+  methods.forEach(function (m) {
+    options[m] = options[m] || fs[m];
+    m = m + 'Sync';
+    options[m] = options[m] || fs[m];
+  });
 
-  options.maxBusyTries = options.maxBusyTries || 3
-  options.emfileWait = options.emfileWait || 1000
-}
-
+  options.maxBusyTries = options.maxBusyTries || 3;
+  options.emfileWait = options.emfileWait || 1000;
+};
 
 /** Map dependencies object to a map of names to versions */
-const getDepVersionMap = (dependencies = {}) => Object.keys(dependencies).map(name => [name, dependencies[name]])
+var getDepVersionMap = function getDepVersionMap() {
+  var dependencies = arguments.length <= 0 || arguments[0] === undefined ? {} : arguments[0];
+  return Object.keys(dependencies).map(function (name) {
+    return [name, dependencies[name]];
+  });
+};
 
-const getDepMap = ({ dependencies, devDependencies, peerDependencies, optionalDependencies }) => {
-  return new Map( [ ['dependencies', getDepVersionMap(dependencies)]
-                  , ['devDependencies', getDepVersionMap(devDependencies)]
-                  , ['peerDependencies', getDepVersionMap(peerDependencies)]
-                  , ['optionalDependencies', getDepVersionMap(optionalDependencies)]
-                  ])
-}
+var getDepMap = function getDepMap(_ref) {
+  var dependencies = _ref.dependencies;
+  var devDependencies = _ref.devDependencies;
+  var peerDependencies = _ref.peerDependencies;
+  var optionalDependencies = _ref.optionalDependencies;
 
-/** NOT RECURSIVE ENOUGH... */
-const flattenOnProp = (obj, name, prop) => {
-  let result = []
-  let node = obj[name]
-  let value = obj[prop]
-  while(node) {
-    result.add(value)
-    node = node[name]
-    value = node[prop]
+  return new Map([['dependencies', getDepVersionMap(dependencies)], ['devDependencies', getDepVersionMap(devDependencies)], ['peerDependencies', getDepVersionMap(peerDependencies)], ['optionalDependencies', getDepVersionMap(optionalDependencies)]]);
+};
+
+var flattenOnProp = function flattenOnProp(obj, name, prop) {
+  var result = [];
+  var node = obj[name];
+  var value = obj[prop];
+  while (node) {
+    result.add(value);
+    node = node[name];
+    value = node[prop];
   }
-  return result
-}
+  return result;
+};
 
-const readPackage = dir => {
-  let packageStats =  { packageDir: dir
-                      , packageJsonPath: join(dir, 'package.json')
-                      , nodeModulesDir: join(dir, 'node_modules')
-                      , hasNodeModules: null
-                      , isCorrupt: null
-                      , depMap: null
-                      , childPackageStats: null
+var readPackage = function readPackage(dir) {
+  var packageStats = { packageDir: dir,
+    packageJsonPath: (0, _path.join)(dir, 'package.json'),
+    nodeModulesDir: (0, _path.join)(dir, 'node_modules'),
+    hasNodeModules: null,
+    isCorrupt: null,
+    depMap: null,
+    childPackageStats: null,
 
-                      , isCorrupt: false
-                      }
+    isCorrupt: false
+  };
 
-  const getRecursiveMap = (obj, name, prop) => new Map(flattenOnProp(obj, name, prop)) 'childPackageStats', 'depMap'))
-  const aggregator =  { get recursiveDepMap() {
-                          return getRecursiveMap(packageStats, 'childPackageStats')
-                        }
-                      , get physicalDeps() {
-                          let physicalSet = new Set()
-                        }
-                      , get deps() {
-                        }
-                      , get devDeps() {
+  var getRecursiveDepMap = function getRecursiveDepMap() {
+    return new Map(flattenOnProp(packageStats, 'childPackageStats', 'depMap'));
+  };
+  var aggregator = { get recursiveDepMap() {
+      return getRecursiveDepMap();
+    },
+    get physicalDeps() {
+      var physicalSet = new Set();
+    },
+    get deps() {},
+    get devDeps() {},
+    get peerDeps() {},
+    get optionalDeps() {},
+    get logicalDeps() {}
+  };
+  var packageJsonPath = packageStats.packageJsonPath;
+  var nodeModulesDir = packageStats.nodeModulesDir;
 
-                        }
-                      , get peerDeps() {
+  return new Promise(function (resolve, reject) {
+    (0, _fs.lstat)(packageJsonPath, function (err, stats) {
+      if (err) return reject(err);
+      if (!stats.isFile()) return resolve(Object.assign({}, packageStats, { isCorrupt: true }));
+      (0, _fs.readFile)(packageJsonPath, 'utf8', function (err, packageJson) {
+        if (err) return reject(err);
+        var packageObj = JSON.parse(packageJson);
+        var depMap = getDepMap(packageObj);
 
-                        }
-                      , get optionalDeps() {
-
-                        }
-                      , get logicalDeps() {
-
-                        }
-                    }
-  const { packageJsonPath, nodeModulesDir } = packageStats
-  return new Promise((resolve, reject) => {
-    lstat(packageJsonPath, (err, stats) => {
-      if(err)
-        return reject(err)
-      if(!stats.isFile())
-        return resolve(Object.assign({}, packageStats, { isCorrupt: true }))
-      readFile(packageJsonPath, 'utf8', (err, packageJson) => {
-        if(err)
-          return reject(err)
-        const packageObj = JSON.parse(packageJson)
-        const depMap = getDepMap(packageObj)
-
-        readdir(nodeModulesDir, (err, children) => {
-          if(err)
-            return resolve(Object.assign({}, packageStats, { depMap, hasNodeModules: false, aggregator }))
-          Promise.all(children.filter(x => x !== '.bin').map(x => npmCleanup({ dir: join(nodeModulesDir, x), isMain: false, aggregator })))
-            .then(childPackageStats => {
-              resolve(Object.assign({}, packageStats, { depMap, childPackageStats, hasNodeModules: true, aggregator }))
-            })
-            .catch(err => {
-              reject(err)
-            })
-        })
-      })
-    })
-  })
-}
+        (0, _fs.readdir)(nodeModulesDir, function (err, children) {
+          if (err) return resolve(Object.assign({}, packageStats, { depMap: depMap, hasNodeModules: false, aggregator: aggregator }));
+          Promise.all(children.filter(function (x) {
+            return x !== '.bin';
+          }).map(function (x) {
+            return npmCleanup({ dir: (0, _path.join)(nodeModulesDir, x), isMain: false, aggregator: aggregator });
+          })).then(function (childPackageStats) {
+            resolve(Object.assign({}, packageStats, { depMap: depMap, childPackageStats: childPackageStats, hasNodeModules: true, aggregator: aggregator }));
+          }).catch(function (err) {
+            reject(err);
+          });
+        });
+      });
+    });
+  });
+};
 /** Get stats on the path */
 /** 1) path is directory => check for package.json
       =>  no package.json exists => exists in package.json?
@@ -133,20 +143,20 @@ const readPackage = dir => {
 
     2) Path is file (not package.json) => delete it, should only be hitting 3 files (package directory, node_modules directory, package.json)
 **/
-export default function npmCleanup ({ dir, isMain = true }) {
-  assert.ok(dir, 'npm-cleanup: missing path')
-  assert.equal(typeof dir, 'string', 'npm-cleanup: path should be a string')
+function npmCleanup(_ref2) {
+  var dir = _ref2.dir;
+  var _ref2$isMain = _ref2.isMain;
+  var isMain = _ref2$isMain === undefined ? true : _ref2$isMain;
 
-  return readPackage(dir)
-    .then(packageStats => {
-      if(!isMain)
-        return packageStats
-      return packageStats
-    })
-    .catch(err => {
-      throw err
-    })
+  _assert2.default.ok(dir, 'npm-cleanup: missing path');
+  _assert2.default.equal(typeof dir === 'undefined' ? 'undefined' : _typeof(dir), 'string', 'npm-cleanup: path should be a string');
 
+  return readPackage(dir).then(function (packageStats) {
+    if (!isMain) return packageStats;
+    return packageStats;
+  }).catch(function (err) {
+    throw err;
+  });
 }
 // Two possible strategies.
 // 1. Assume it's a file.  unlink it, then do the dir stuff on EPERM or EISDIR
